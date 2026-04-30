@@ -1,0 +1,203 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent deployments running simultaneously
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: car-valuation-api
+  LAMBDA_FUNCTION: car-valuation-api
+  LAMBDA_FUNCTION_STAGING: car-valuation-api-staging
+
+jobs:
+  deploy:
+    name: Build → Push ECR → Deploy Lambda
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for OIDC authentication
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # -----------------------------------------------------------------------
+      # Build and push container image
+      # -----------------------------------------------------------------------
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          LATEST_URI=$ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          docker build \
+            --build-arg GIT_SHA=$IMAGE_TAG \
+            --cache-from $LATEST_URI \
+            -t $IMAGE_URI \
+            -t $LATEST_URI \
+            .
+
+          docker push $IMAGE_URI
+          docker push $LATEST_URI
+
+          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "Image pushed: $IMAGE_URI"
+
+      # -----------------------------------------------------------------------
+      # Deploy to staging first
+      # -----------------------------------------------------------------------
+
+      - name: Deploy to staging Lambda
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+        run: |
+          aws lambda update-function-code \
+            --function-name $LAMBDA_FUNCTION_STAGING \
+            --image-uri $IMAGE_URI
+
+          # Wait for update to complete (max 120s)
+          aws lambda wait function-updated \
+            --function-name $LAMBDA_FUNCTION_STAGING
+
+          echo "Staging Lambda updated."
+
+      - name: Smoke test staging
+        env:
+          STAGING_URL: ${{ secrets.STAGING_API_URL }}
+        run: |
+          # Retry up to 5 times (Lambda cold start)
+          for i in {1..5}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Staging /health returned 200. OK."
+              break
+            fi
+            echo "Attempt $i: /health returned $STATUS. Retrying in 10s..."
+            sleep 10
+          done
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Staging smoke test failed after 5 attempts."
+            exit 1
+          fi
+
+          # Test /predict with a real payload
+          curl -s -X POST "$STAGING_URL/predict" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model_key": "320d",
+              "mileage": 120000,
+              "engine_power": 184,
+              "registration_date": "2015-03-01",
+              "fuel": "diesel",
+              "paint_color": "black",
+              "car_type": "sedan",
+              "sold_at": "2020-06-15"
+            }' | python -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          assert 'prediction_id' in data, f'Missing prediction_id: {data}'
+          assert 'shap_values' in data, f'Missing shap_values: {data}'
+          assert data['predicted_price'] > 0, f'Invalid price: {data}'
+          print(f'Staging predict OK: price={data[\"predicted_price\"]:.0f} EUR')
+          "
+
+      # -----------------------------------------------------------------------
+      # Run bias test and generate model card on staging
+      # -----------------------------------------------------------------------
+
+      - name: Set up Python for post-deploy scripts
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bias test
+        run: python scripts/run_bias_test.py
+        env:
+          MODEL_PATH: models/rand_forest_v1.pkl
+
+      - name: Generate model card
+        run: python scripts/generate_model_card.py
+        env:
+          MODEL_PATH: models/rand_forest_v1.pkl
+          MODEL_VERSION: ${{ github.sha }}
+
+      - name: Upload model card to S3
+        run: |
+          aws s3 cp model_card.json \
+            s3://${{ secrets.MODEL_BUCKET }}/rand_forest_v1/model_card.json \
+            --content-type application/json
+
+      # -----------------------------------------------------------------------
+      # Deploy to production
+      # -----------------------------------------------------------------------
+
+      - name: Deploy to production Lambda
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+        run: |
+          aws lambda update-function-code \
+            --function-name $LAMBDA_FUNCTION \
+            --image-uri $IMAGE_URI
+
+          aws lambda wait function-updated \
+            --function-name $LAMBDA_FUNCTION
+
+          echo "Production Lambda updated: $IMAGE_URI"
+
+      - name: Smoke test production
+        env:
+          PROD_URL: ${{ secrets.PROD_API_URL }}
+        run: |
+          for i in {1..5}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$PROD_URL/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Production /health returned 200. Deployment successful."
+              break
+            fi
+            echo "Attempt $i: /health returned $STATUS. Retrying in 10s..."
+            sleep 10
+          done
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Production smoke test FAILED."
+            exit 1
+          fi
+
+      # -----------------------------------------------------------------------
+      # Notify on failure
+      # -----------------------------------------------------------------------
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          aws cloudwatch put-metric-data \
+            --namespace CarValuation \
+            --metric-data MetricName=DeploymentFailure,Value=1,Unit=Count \
+            --region $AWS_REGION
+          echo "Deployment failed — CloudWatch metric pushed."

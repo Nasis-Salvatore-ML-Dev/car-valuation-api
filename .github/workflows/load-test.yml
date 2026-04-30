@@ -1,0 +1,86 @@
+name: Load Test
+
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  load-test:
+    name: Locust — 50 users × 60s against staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Locust
+        run: pip install locust
+
+      - name: Warm up staging endpoint
+        env:
+          STAGING_URL: ${{ secrets.STAGING_API_URL }}
+        run: |
+          # 3 warm-up requests to avoid cold start in the load test
+          for i in {1..3}; do
+            curl -s "$STAGING_URL/health" > /dev/null
+            sleep 2
+          done
+          echo "Warm-up complete."
+
+      - name: Run Locust load test
+        env:
+          STAGING_URL: ${{ secrets.STAGING_API_URL }}
+        run: |
+          locust \
+            -f tests/load/locustfile.py \
+            --headless \
+            --users 50 \
+            --spawn-rate 5 \
+            --run-time 60s \
+            --host $STAGING_URL \
+            --html tests/load/report.html \
+            --csv tests/load/results \
+            --exit-code-on-error 1
+
+      - name: Assert latency thresholds
+        run: |
+          python - <<'EOF'
+          import csv
+
+          with open("tests/load/results_stats.csv") as f:
+              reader = csv.DictReader(f)
+              rows = list(reader)
+
+          # Find the /predict row
+          predict_row = next((r for r in rows if "/predict" in r.get("Name", "")), None)
+          aggregate_row = next((r for r in rows if r.get("Name") == "Aggregated"), None)
+
+          if predict_row:
+              p99 = float(predict_row.get("99%", 0))
+              error_pct = float(predict_row.get("Failure Count", 0)) / max(float(predict_row.get("Request Count", 1)), 1) * 100
+              print(f"/predict p99={p99:.0f}ms  error_rate={error_pct:.2f}%")
+              assert p99 < 2000, f"p99 latency {p99:.0f}ms exceeds 2000ms threshold"
+              assert error_pct < 1.0, f"Error rate {error_pct:.2f}% exceeds 1% threshold"
+
+          if aggregate_row:
+              rps = float(aggregate_row.get("Requests/s", 0))
+              print(f"Overall RPS={rps:.1f}")
+
+          print("Load test PASSED. All thresholds met.")
+          EOF
+
+      - name: Upload load test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-report
+          path: |
+            tests/load/report.html
+            tests/load/results_stats.csv
+            tests/load/results_failures.csv
