@@ -1,8 +1,33 @@
-# Documents
-docs/useful_commands.md
-docs/runbook.md
-bmw-pricing-runbook.md
+# Virtual environment
+.car-valuation/
 
-# Notebooks
-experiments/
-exploratory/
+# Model artifacts (stored in S3, not git)
+models/*.pkl
+models/*.onnx
+
+# Data (generated, not committed)
+data/baselines/
+data/reports/
+data/training/
+data/validation/
+
+# Notebooks (kept local per your decision)
+notebooks/
+
+# Docs (kept local per your decision)
+docs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+htmlcov/
+.coverage
+.mypy_cache/
+
+# OS
+.DS_Store
+
+# Secrets
+.env
