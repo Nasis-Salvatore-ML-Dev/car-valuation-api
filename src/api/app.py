@@ -89,10 +89,22 @@ async def lifespan(app: FastAPI):
     try:
         _model_bundle = load_model_bundle()
         logger.info("Model bundle loaded: %s", _model_bundle.version)
+    except Exception:
+        logger.exception("Fatal: model loading failed.")
+        raise
 
+    # SHAP is non-critical — service degrades gracefully without it
+    try:
         _shap_explainer = SHAPExplainer(_model_bundle)
         logger.info("SHAP explainer initialised.")
+    except Exception:
+        _shap_explainer = None
+        logger.exception(
+            "SHAP explainer failed to initialise. "
+            "Predictions will be served without SHAP values."
+        )
 
+    try:
         _drift_monitor = DriftMonitor()
         logger.info("Drift monitor initialised.")
 
@@ -101,9 +113,8 @@ async def lifespan(app: FastAPI):
 
         _bias_suite = BiasTestSuite(_model_bundle)
         logger.info("Bias test suite initialised.")
-
     except Exception:
-        logger.exception("Fatal: startup failed.")
+        logger.exception("Fatal: monitoring components failed to initialise.")
         raise
 
     yield  # application serves requests here
@@ -161,7 +172,7 @@ async def predict(request: Request, payload: PredictionRequest) -> PredictionRes
     Predict BMW car price with SHAP explainability.
 
     Every prediction is:
-    - SHAP-explained (per-feature contribution)
+    - SHAP-explained (per-feature contribution) when available
     - Written to DynamoDB audit log (append-only)
     - Auto-routed to override queue if confidence is low
     """
@@ -175,8 +186,17 @@ async def predict(request: Request, payload: PredictionRequest) -> PredictionRes
         predicted_price_log = bundle.model.predict(features_df)[0]
         predicted_price = float(bundle.inverse_transform_price(predicted_price_log))
 
-        shap_values = _shap_explainer.explain(features_df)
-        confidence_score = _shap_explainer.confidence_score(predicted_price, bundle)
+        # SHAP: graceful degradation if explainer is unavailable
+        if _shap_explainer is not None:
+            shap_values = _shap_explainer.explain(features_df)
+            confidence_score = _shap_explainer.confidence_score(predicted_price, bundle)
+        else:
+            shap_values = {}
+            confidence_score = 0.5
+            logger.warning(
+                "prediction_id=%s served without SHAP (explainer unavailable)",
+                prediction_id,
+            )
 
         latency_ms = (time.perf_counter() - start_ts) * 1000
 
@@ -288,6 +308,11 @@ async def explain_global() -> ExplainGlobalResponse:
     Computed at container startup over the background reference dataset.
     Represents which features drive the model across the population.
     """
+    if _shap_explainer is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SHAP explainer is unavailable. Global importance cannot be computed.",
+        )
     importance = _shap_explainer.global_importance()
     return ExplainGlobalResponse(
         model_version=_get_model().version,
