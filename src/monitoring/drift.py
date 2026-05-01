@@ -23,7 +23,7 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -155,16 +155,12 @@ class DriftMonitor:
                         pass
 
             if len(actual_values) < 10:
-                logger.warning(
-                    "Feature %r: fewer than 10 actual values — skipping PSI.", feature
-                )
+                logger.warning("Feature %r: fewer than 10 actual values — skipping PSI.", feature)
                 continue
 
             actual_arr = np.array(actual_values)
             actual_counts, _ = np.histogram(actual_arr, bins=bin_edges)
-            actual_prop = np.clip(
-                actual_counts / (actual_counts.sum() + 1e-9), 1e-4, None
-            )
+            actual_prop = np.clip(actual_counts / (actual_counts.sum() + 1e-9), 1e-4, None)
 
             expected_clipped = np.clip(expected_prop, 1e-4, None)
             psi = float(
@@ -189,7 +185,7 @@ class DriftMonitor:
         recommendation = self._recommendation(overall_status, worst_psi)
 
         report = DriftReport(
-            computed_at=datetime.now(timezone.utc).isoformat(),
+            computed_at=datetime.now(UTC).isoformat(),
             n_recent_predictions=n,
             overall_status=overall_status,
             features=results,

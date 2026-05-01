@@ -23,7 +23,7 @@ The bias report is:
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -90,12 +90,12 @@ class BiasTestSuite:
         overall_mae = float(np.mean(np.abs(actual_eur - predicted_eur)))
         overall_rmse = float(np.sqrt(np.mean((actual_eur - predicted_eur) ** 2)))
         r2 = float(
-            1 - np.sum((actual_eur - predicted_eur) ** 2) / np.sum((actual_eur - actual_eur.mean()) ** 2)
+            1
+            - np.sum((actual_eur - predicted_eur) ** 2)
+            / np.sum((actual_eur - actual_eur.mean()) ** 2)
         )
 
-        segments = self._compute_segments(
-            validation_df, actual_eur, predicted_eur, overall_mae
-        )
+        segments = self._compute_segments(validation_df, actual_eur, predicted_eur, overall_mae)
 
         flagged_segments = [s for s in segments if s["flagged"]]
         recommendation = None
@@ -114,7 +114,7 @@ class BiasTestSuite:
             "overall_r2": round(r2, 4),
             "bias_segments": segments,
             "model_card_s3_uri": f"s3://car-valuation-models/{self._bundle.version}/model_card.json",
-            "computed_at": datetime.now(timezone.utc).isoformat(),
+            "computed_at": datetime.now(UTC).isoformat(),
             "recommendation": recommendation,
         }
 
@@ -175,7 +175,9 @@ class BiasTestSuite:
 
         if "luxury_tier" in df.columns:
             luxury_mask = df["luxury_tier"].values >= 3
-            _add_segment("luxury", "luxury_tier >= 3 (5 Series, 7 Series, X5, M-series)", luxury_mask)
+            _add_segment(
+                "luxury", "luxury_tier >= 3 (5 Series, 7 Series, X5, M-series)", luxury_mask
+            )
             _add_segment("economy", "luxury_tier < 3 (1 Series, 3 Series, X1, X3)", ~luxury_mask)
 
         if "car_age_years" in df.columns:
@@ -216,6 +218,6 @@ class BiasTestSuite:
             "overall_r2": 0.0,
             "bias_segments": [],
             "model_card_s3_uri": "",
-            "computed_at": datetime.now(timezone.utc).isoformat(),
+            "computed_at": datetime.now(UTC).isoformat(),
             "recommendation": "Validation data not available at startup.",
         }

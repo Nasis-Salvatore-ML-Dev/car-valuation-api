@@ -23,10 +23,9 @@ every automated decision is logged with its inputs, outputs, model version,
 and explainability data in a tamper-evident store.
 """
 
-import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import boto3
 from botocore.exceptions import ClientError
@@ -55,9 +54,7 @@ class AuditLogger:
     def __init__(self) -> None:
         region = os.environ.get(_AWS_REGION_ENV, "us-east-1")
         self._ddb = boto3.resource("dynamodb", region_name=region)
-        self._audit_table = self._ddb.Table(
-            os.environ.get(_AUDIT_TABLE_ENV, _DEFAULT_AUDIT_TABLE)
-        )
+        self._audit_table = self._ddb.Table(os.environ.get(_AUDIT_TABLE_ENV, _DEFAULT_AUDIT_TABLE))
         self._override_table = self._ddb.Table(
             os.environ.get(_OVERRIDE_TABLE_ENV, _DEFAULT_OVERRIDE_TABLE)
         )
@@ -95,7 +92,7 @@ class AuditLogger:
             request_ip:     IP of the requesting client.
             latency_ms:     End-to-end inference latency.
         """
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         item = {
             "prediction_id": prediction_id,
@@ -124,9 +121,7 @@ class AuditLogger:
                 )
             else:
                 # Log but do not fail the prediction request
-                logger.exception(
-                    "DynamoDB write failed for prediction_id=%s", prediction_id
-                )
+                logger.exception("DynamoDB write failed for prediction_id=%s", prediction_id)
 
     async def fetch(self, prediction_id: str) -> dict | None:
         """
@@ -190,10 +185,8 @@ class AuditLogger:
             reason:        Why this prediction needs review.
             reviewer_notes: Optional free-text notes from the requester.
         """
-        timestamp = datetime.now(timezone.utc).isoformat()
-        ttl_epoch = int(
-            (datetime.now(timezone.utc) + timedelta(days=_OVERRIDE_TTL_DAYS)).timestamp()
-        )
+        timestamp = datetime.now(UTC).isoformat()
+        ttl_epoch = int((datetime.now(UTC) + timedelta(days=_OVERRIDE_TTL_DAYS)).timestamp())
 
         try:
             self._override_table.put_item(
@@ -206,14 +199,10 @@ class AuditLogger:
                     "ttl": ttl_epoch,
                 }
             )
-            logger.info(
-                "Override queued: prediction_id=%s reason=%r", prediction_id, reason
-            )
+            logger.info("Override queued: prediction_id=%s reason=%r", prediction_id, reason)
 
         except ClientError:
-            logger.exception(
-                "DynamoDB override write failed for prediction_id=%s", prediction_id
-            )
+            logger.exception("DynamoDB override write failed for prediction_id=%s", prediction_id)
 
     # -----------------------------------------------------------------------
     # Private helpers

@@ -74,7 +74,10 @@ def compute_baseline(df: pd.DataFrame) -> dict:
 
         logger.info(
             "Feature %r: %d bins, mean=%.2f, std=%.2f",
-            feature, len(bin_edges) - 1, baseline[feature]["mean"], baseline[feature]["std"]
+            feature,
+            len(bin_edges) - 1,
+            baseline[feature]["mean"],
+            baseline[feature]["std"],
         )
 
     return baseline
@@ -105,15 +108,15 @@ def main() -> None:
     # Sample SHAP background dataset
     # Use model feature columns only (drop target)
     feature_cols = [c for c in df.columns if c != "actual_price_log"]
-    background = df[feature_cols].sample(
-        n=min(N_SHAP_BACKGROUND, len(df)), random_state=42
-    )
+    background = df[feature_cols].sample(n=min(N_SHAP_BACKGROUND, len(df)), random_state=42)
     bg_path = Path(SHAP_BACKGROUND_OUTPUT)
     bg_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(background, bg_path)
     logger.info(
         "SHAP background dataset saved: %d rows × %d cols → %s",
-        len(background), len(background.columns), bg_path
+        len(background),
+        len(background.columns),
+        bg_path,
     )
 
     logger.info("Baseline computation complete.")

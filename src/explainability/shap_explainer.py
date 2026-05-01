@@ -53,9 +53,7 @@ class SHAPExplainer:
         """
         background = self._load_background()
 
-        logger.info(
-            "Initialising TreeExplainer with background dataset shape=%s", background.shape
-        )
+        logger.info("Initialising TreeExplainer with background dataset shape=%s", background.shape)
         self._explainer = shap.TreeExplainer(
             bundle.model,
             data=background,
@@ -73,7 +71,7 @@ class SHAPExplainer:
         # We report them in log-EUR for consistency with the prediction.
         self._global_importance: dict[str, float] = dict(
             sorted(
-                zip(self._feature_names, mean_abs.tolist()),
+                zip(self._feature_names, mean_abs.tolist(), strict=False),
                 key=lambda x: x[1],
                 reverse=True,
             )
@@ -96,9 +94,7 @@ class SHAPExplainer:
             Negative = contribution toward lower price.
         """
         if len(features_df) != 1:
-            raise ValueError(
-                f"explain() expects exactly 1 row; got {len(features_df)}."
-            )
+            raise ValueError(f"explain() expects exactly 1 row; got {len(features_df)}.")
 
         shap_vals = self._explainer.shap_values(features_df)
 
@@ -112,7 +108,7 @@ class SHAPExplainer:
         else:
             raw = shap_vals[0]
 
-        return {name: float(val) for name, val in zip(self._feature_names, raw)}
+        return {name: float(val) for name, val in zip(self._feature_names, raw, strict=False)}
 
     def global_importance(self) -> dict[str, float]:
         """

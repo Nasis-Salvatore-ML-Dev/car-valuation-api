@@ -13,7 +13,6 @@ Outputs:
 """
 
 import logging
-import sys
 import time
 from pathlib import Path
 
@@ -82,9 +81,9 @@ def verify_onnx(pkl_path: str, onnx_path: str) -> None:
         pkl_pred = model.predict(x.reshape(1, -1))[0]
         onnx_pred = sess.run(None, {input_name: x.reshape(1, -1)})[0][0][0]
         rel_diff = abs(pkl_pred - onnx_pred) / (abs(pkl_pred) + 1e-9)
-        assert rel_diff < 0.001, (
-            f"Sample {i}: pkl={pkl_pred:.6f} onnx={onnx_pred:.6f} rel_diff={rel_diff:.6f}"
-        )
+        assert (
+            rel_diff < 0.001
+        ), f"Sample {i}: pkl={pkl_pred:.6f} onnx={onnx_pred:.6f} rel_diff={rel_diff:.6f}"
         logger.info(
             "Sample %d: pkl=%.4f onnx=%.4f rel_diff=%.6f ✓", i, pkl_pred, onnx_pred, rel_diff
         )
@@ -132,11 +131,17 @@ def benchmark(pkl_path: str, onnx_path: str, n_runs: int = N_BENCHMARK_RUNS) -> 
     print("├──────────────┬───────────┬───────────┬───────────┬──────────┤")
     print("│ Format       │ Size (MB) │  p50 (ms) │  p99 (ms) │  Speedup │")
     print("├──────────────┼───────────┼───────────┼───────────┼──────────┤")
-    print(f"│ sklearn pkl  │  {pkl_size_mb:7.1f}  │  {np.percentile(pkl_arr, 50):7.3f}  │  {np.percentile(pkl_arr, 99):7.3f}  │    1.0x  │")
+    print(
+        f"│ sklearn pkl  │  {pkl_size_mb:7.1f}  │  {np.percentile(pkl_arr, 50):7.3f}  │  {np.percentile(pkl_arr, 99):7.3f}  │    1.0x  │"
+    )
     speedup = np.percentile(pkl_arr, 50) / np.percentile(onnx_arr, 50)
-    print(f"│ ONNX         │  {onnx_size_mb:7.1f}  │  {np.percentile(onnx_arr, 50):7.3f}  │  {np.percentile(onnx_arr, 99):7.3f}  │  {speedup:5.1f}x  │")
+    print(
+        f"│ ONNX         │  {onnx_size_mb:7.1f}  │  {np.percentile(onnx_arr, 50):7.3f}  │  {np.percentile(onnx_arr, 99):7.3f}  │  {speedup:5.1f}x  │"
+    )
     print("└──────────────┴───────────┴───────────┴───────────┴──────────┘")
-    print(f"\nONNX is {speedup:.1f}x {'faster' if speedup > 1 else 'slower'} than sklearn pkl at p50.")
+    print(
+        f"\nONNX is {speedup:.1f}x {'faster' if speedup > 1 else 'slower'} than sklearn pkl at p50."
+    )
 
 
 def main() -> None:

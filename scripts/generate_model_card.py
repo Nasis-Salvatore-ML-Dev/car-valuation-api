@@ -14,7 +14,7 @@ Outputs:
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -37,7 +37,7 @@ def load_bias_report() -> dict:
 def generate_model_card(bias_report: dict) -> dict:
     return {
         "model_card_version": "1.0",
-        "last_updated": datetime.now(timezone.utc).isoformat(),
+        "last_updated": datetime.now(UTC).isoformat(),
         "model_details": {
             "name": "BMW Car Valuation Model",
             "version": MODEL_VERSION,

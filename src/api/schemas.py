@@ -4,7 +4,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ---------------------------------------------------------------------------
 # Request schemas
 # ---------------------------------------------------------------------------
@@ -54,7 +53,16 @@ class PredictionRequest(BaseModel):
     @field_validator("car_type")
     @classmethod
     def _validate_car_type(cls, v: str) -> str:
-        allowed = {"sedan", "suv", "coupe", "convertible", "estate", "hatchback", "van", "subcompact"}
+        allowed = {
+            "sedan",
+            "suv",
+            "coupe",
+            "convertible",
+            "estate",
+            "hatchback",
+            "van",
+            "subcompact",
+        }
         v = v.lower()
         if v not in allowed:
             raise ValueError(f"car_type must be one of {sorted(allowed)}")

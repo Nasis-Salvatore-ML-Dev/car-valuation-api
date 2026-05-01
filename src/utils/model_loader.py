@@ -49,6 +49,7 @@ class ModelBundle:
         Mirrors the feature engineering logic from Phase 1 exactly.
         """
         from src.api.preprocessing import build_feature_dataframe
+
         return build_feature_dataframe(payload, self.encoders, self.target_encodings)
 
     def inverse_transform_price(self, log_price: float) -> float:
@@ -139,7 +140,7 @@ def _load_from_s3(s3_uri: str) -> object:
     import boto3
 
     # Parse s3://bucket/key
-    without_scheme = s3_uri[len("s3://"):]
+    without_scheme = s3_uri[len("s3://") :]
     bucket, _, key = without_scheme.partition("/")
     filename = Path(key).name
     local_tmp = Path("/tmp") / filename

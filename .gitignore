@@ -11,11 +11,16 @@ data/reports/
 data/training/
 data/validation/
 
-# Notebooks (kept local per your decision)
-notebooks/
+# Documents
 
-# Docs (kept local per your decision)
-docs/
+docs/useful_commands.md
+docs/runbook.md
+bmw-pricing-runbook.md
+
+# Notebooks
+
+experiments/
+exploratory/
 
 # Python
 __pycache__/
