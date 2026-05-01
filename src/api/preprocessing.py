@@ -9,10 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 def build_feature_dataframe(payload, encoders, target_encodings) -> pd.DataFrame:
-    raise NotImplementedError("Extract from Phase 1 app.py — Day 1 task.")
-
-
-def preprocess_inputbuild_feature_dataframe(payload, encoders, target_encodings) -> pd.DataFrame:
     """
     Preprocess input features to match EXACT training format
 
