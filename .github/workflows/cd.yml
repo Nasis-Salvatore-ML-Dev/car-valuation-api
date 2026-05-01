@@ -137,7 +137,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run bias test
-        run: python scripts/run_bias_test.py
+        run: PYTHONPATH=. python scripts/run_bias_test.py
         env:
           MODEL_PATH: models/rand_forest_v1.pkl
 
