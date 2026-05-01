@@ -114,9 +114,7 @@ class SHAPExplainer:
             ValueError: if features_df does not contain exactly one row.
         """
         if len(features_df) != 1:
-            raise ValueError(
-                f"explain() expects exactly 1 row; got {len(features_df)}."
-            )
+            raise ValueError(f"explain() expects exactly 1 row; got {len(features_df)}.")
 
         shap_vals = self._explainer.shap_values(
             features_df,
@@ -133,10 +131,7 @@ class SHAPExplainer:
         else:
             raw = shap_vals[0]
 
-        return {
-            name: float(val)
-            for name, val in zip(self._feature_names, raw, strict=False)
-        }
+        return {name: float(val) for name, val in zip(self._feature_names, raw, strict=False)}
 
     def global_importance(self) -> dict[str, float]:
         """
