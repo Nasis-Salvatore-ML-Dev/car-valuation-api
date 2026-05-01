@@ -104,15 +104,15 @@ def preprocess_inputbuild_feature_dataframe(payload, encoders, target_encodings)
     # Apply label encoders to raw categorical columns
     # This includes: maker_key, model_key, fuel, paint_color, car_type
     # ------------------------------------------------------------------
-    if ENCODERS:
-        for col, encoder in ENCODERS.items():
+    if encoders:
+        for col, encoder in encoders.items():
             if col in df.columns:
                 try:
                     # Map each value to its integer label; unseen categories get -1
                     df[col] = (
                         df[col]
                         .astype(str)
-                        .apply(lambda x: encoder.transform([x])[0] if x in encoder.classes_ else -1)
+                        .apply(lambda x, enc=encoder: enc.transform([x])[0] if x in enc.classes_ else -1)
                     )
                 except Exception as e:
                     logger.warning(f"Encoding error for column {col}: {e}")
@@ -128,15 +128,15 @@ def preprocess_inputbuild_feature_dataframe(payload, encoders, target_encodings)
     # Create target-encoded columns using saved mappings
     # These are: fuel_encoded, color_encoded, car_type_encoded
     # ------------------------------------------------------------------
-    if TARGET_ENCODINGS:
+    if target_encodings:
         # Fuel
-        fuel_map = TARGET_ENCODINGS.get("fuel", {})
+        fuel_map = target_encodings.get("fuel", {})
         df["fuel_encoded"] = (
             df["fuel"].map(fuel_map).fillna(np.mean(list(fuel_map.values())) if fuel_map else 0)
         )
 
         # Color (paint_color)
-        color_map = TARGET_ENCODINGS.get("color", {})
+        color_map = target_encodings.get("color", {})
         df["color_encoded"] = (
             df["paint_color"]
             .map(color_map)
@@ -144,7 +144,7 @@ def preprocess_inputbuild_feature_dataframe(payload, encoders, target_encodings)
         )
 
         # Car type
-        car_type_map = TARGET_ENCODINGS.get("car_type", {})
+        car_type_map = target_encodings.get("car_type", {})
         df["car_type_encoded"] = (
             df["car_type"]
             .map(car_type_map)
