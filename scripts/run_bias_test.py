@@ -9,7 +9,6 @@ Usage:
     MODEL_PATH=models/rand_forest_v1.pkl python scripts/run_bias_test.py
 """
 
-import json
 import sys
 
 from src.monitoring.bias_tester import BiasTestSuite
