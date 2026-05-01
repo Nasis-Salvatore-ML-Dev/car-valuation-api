@@ -32,8 +32,10 @@ COPY --from=builder /build/packages ${LAMBDA_TASK_ROOT}
 # Copy application code
 COPY src/ ${LAMBDA_TASK_ROOT}/src/
 COPY models/ ${LAMBDA_TASK_ROOT}/models/
-COPY data/baselines/ ${LAMBDA_TASK_ROOT}/data/baselines/
-COPY data/reports/ ${LAMBDA_TASK_ROOT}/data/reports/
+RUN mkdir -p ${LAMBDA_TASK_ROOT}/data/baselines \
+             ${LAMBDA_TASK_ROOT}/data/reports \
+             ${LAMBDA_TASK_ROOT}/data/training \
+             ${LAMBDA_TASK_ROOT}/data/validation
 COPY model_card.json ${LAMBDA_TASK_ROOT}/
 
 # Copy __init__ files to make packages importable
