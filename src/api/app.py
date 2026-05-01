@@ -2,13 +2,17 @@
 Car Valuation API — production FastAPI application.
 
 Deployed on AWS Lambda via Mangum adapter. Provides car price predictions
-with SHAP explainability, drift detection, human override routing,
-and immutable DynamoDB audit logging.
+with drift detection, human override routing, and immutable DynamoDB
+audit logging.
+
+SHAP explainability is temporarily disabled pending a model artifact
+rebuild to resolve a scikit-learn version mismatch that causes C-level
+memory corruption in the SHAP TreeExplainer.
 
 Endpoints:
-    POST /predict           — Price prediction with SHAP values
-    GET  /explain/{id}      — Full SHAP breakdown for a logged prediction
-    GET  /explain/global    — Global feature importance (mean |SHAP|)
+    POST /predict           — Price prediction
+    GET  /explain/{id}      — SHAP breakdown (from audit log)
+    GET  /explain/global    — Global feature importance (unavailable)
     POST /override          — Flag prediction for human review
     GET  /drift             — Current PSI drift report
     GET  /health            — Liveness + model version
@@ -38,7 +42,6 @@ from src.api.schemas import (
     PredictionRequest,
     PredictionResponse,
 )
-from src.explainability.shap_explainer import SHAPExplainer
 from src.monitoring.audit_logger import AuditLogger
 from src.monitoring.bias_tester import BiasTestSuite
 from src.monitoring.drift import DriftMonitor
@@ -63,10 +66,12 @@ logger = logging.getLogger(__name__)
 # Application state (loaded once per Lambda container lifetime)
 # ---------------------------------------------------------------------------
 _model_bundle: ModelBundle | None = None
-_shap_explainer: SHAPExplainer | None = None
 _drift_monitor: DriftMonitor | None = None
 _audit_logger: AuditLogger | None = None
 _bias_suite: BiasTestSuite | None = None
+
+# Confidence proxy: RMSE from Phase 1 training (EUR)
+_TRAINING_RMSE_EUR = 2875.0
 
 
 def _get_model() -> ModelBundle:
@@ -83,28 +88,13 @@ def _get_model() -> ModelBundle:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _model_bundle, _shap_explainer, _drift_monitor, _audit_logger, _bias_suite
+    global _model_bundle, _drift_monitor, _audit_logger, _bias_suite
 
-    logger.info("Container startup — loading model and explainer.")
+    logger.info("Container startup — loading model.")
     try:
         _model_bundle = load_model_bundle()
         logger.info("Model bundle loaded: %s", _model_bundle.version)
-    except Exception:
-        logger.exception("Fatal: model loading failed.")
-        raise
 
-    # SHAP is non-critical — service degrades gracefully without it
-    try:
-        _shap_explainer = SHAPExplainer(_model_bundle)
-        logger.info("SHAP explainer initialised.")
-    except Exception:
-        _shap_explainer = None
-        logger.exception(
-            "SHAP explainer failed to initialise. "
-            "Predictions will be served without SHAP values."
-        )
-
-    try:
         _drift_monitor = DriftMonitor()
         logger.info("Drift monitor initialised.")
 
@@ -113,8 +103,9 @@ async def lifespan(app: FastAPI):
 
         _bias_suite = BiasTestSuite(_model_bundle)
         logger.info("Bias test suite initialised.")
+
     except Exception:
-        logger.exception("Fatal: monitoring components failed to initialise.")
+        logger.exception("Fatal: startup failed.")
         raise
 
     yield  # application serves requests here
@@ -128,8 +119,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Car Valuation API",
     description=(
-        "Production-grade car price prediction API with SHAP explainability, "
-        "PSI drift detection, and DynamoDB audit logging."
+        "Production-grade car price prediction API with PSI drift detection "
+        "and DynamoDB audit logging. SHAP explainability temporarily disabled "
+        "pending model artifact rebuild."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -169,12 +161,13 @@ async def health() -> HealthResponse:
 )
 async def predict(request: Request, payload: PredictionRequest) -> PredictionResponse:
     """
-    Predict BMW car price with SHAP explainability.
+    Predict BMW car price.
 
     Every prediction is:
-    - SHAP-explained (per-feature contribution) when available
     - Written to DynamoDB audit log (append-only)
     - Auto-routed to override queue if confidence is low
+
+    SHAP values are temporarily empty pending model artifact rebuild.
     """
     start_ts = time.perf_counter()
     prediction_id = str(uuid.uuid4())
@@ -186,21 +179,17 @@ async def predict(request: Request, payload: PredictionRequest) -> PredictionRes
         predicted_price_log = bundle.model.predict(features_df)[0]
         predicted_price = float(bundle.inverse_transform_price(predicted_price_log))
 
-        # SHAP: graceful degradation if explainer is unavailable
-        if _shap_explainer is not None:
-            shap_values = _shap_explainer.explain(features_df)
-            confidence_score = _shap_explainer.confidence_score(predicted_price, bundle)
-        else:
-            shap_values = {}
-            confidence_score = 0.5
-            logger.warning(
-                "prediction_id=%s served without SHAP (explainer unavailable)",
-                prediction_id,
-            )
+        # SHAP disabled — serve empty values until model artifact is rebuilt
+        shap_values: dict[str, float] = {}
+
+        # Confidence from prediction interval width
+        interval_width = 2 * 1.96 * _TRAINING_RMSE_EUR
+        normalised_width = interval_width / (predicted_price + 1e-9)
+        confidence_score = float(max(0.0, min(1.0, 1.0 - normalised_width)))
 
         latency_ms = (time.perf_counter() - start_ts) * 1000
 
-        # Async-style: audit log write (DynamoDB PutItem, <5ms on warm)
+        # Audit log write (DynamoDB PutItem, <5ms on warm)
         await _audit_logger.write(
             prediction_id=prediction_id,
             input_features=payload.model_dump(),
@@ -222,7 +211,7 @@ async def predict(request: Request, payload: PredictionRequest) -> PredictionRes
                 confidence_score,
             )
 
-        rmse_eur = 2875.0  # Phase 1 training RMSE
+        rmse_eur = _TRAINING_RMSE_EUR
         margin = 1.96 * rmse_eur
 
         logger.info(
@@ -264,7 +253,7 @@ async def predict(request: Request, payload: PredictionRequest) -> PredictionRes
 )
 async def explain_prediction(prediction_id: str) -> ExplainResponse:
     """
-    Return full SHAP breakdown for a logged prediction.
+    Return SHAP breakdown for a logged prediction.
 
     Fetches the original inputs and SHAP values from DynamoDB.
     Returns waterfall-chart-ready data (sorted by |SHAP| descending).
@@ -276,10 +265,23 @@ async def explain_prediction(prediction_id: str) -> ExplainResponse:
             detail=f"Prediction {prediction_id!r} not found in audit log.",
         )
 
-    shap_raw: dict[str, float] = record["shap_values"]
+    shap_raw: dict[str, float] = record.get("shap_values", {})
+    if not shap_raw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"No SHAP values for prediction {prediction_id!r}. "
+                "SHAP is temporarily disabled pending model rebuild."
+            ),
+        )
+
     waterfall = sorted(
         [
-            {"feature": k, "value": record["input_features"].get(k), "shap_contribution": v}
+            {
+                "feature": k,
+                "value": record["input_features"].get(k),
+                "shap_contribution": v,
+            }
             for k, v in shap_raw.items()
         ],
         key=lambda x: abs(x["shap_contribution"]),
@@ -305,21 +307,14 @@ async def explain_global() -> ExplainGlobalResponse:
     """
     Global feature importance: mean absolute SHAP value per feature.
 
-    Computed at container startup over the background reference dataset.
-    Represents which features drive the model across the population.
+    Temporarily unavailable pending model artifact rebuild.
     """
-    if _shap_explainer is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SHAP explainer is unavailable. Global importance cannot be computed.",
-        )
-    importance = _shap_explainer.global_importance()
-    return ExplainGlobalResponse(
-        model_version=_get_model().version,
-        feature_importance=importance,
-        explanation=(
-            "Mean absolute SHAP value per feature across the background reference dataset. "
-            "Higher = more influential in the model's predictions."
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "SHAP explainer is temporarily disabled pending model artifact "
+            "rebuild. Re-enable by retraining the model with a consistent "
+            "scikit-learn version."
         ),
     )
 
