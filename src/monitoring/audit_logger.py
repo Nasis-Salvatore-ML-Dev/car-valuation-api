@@ -23,6 +23,7 @@ every automated decision is logged with its inputs, outputs, model version,
 and explainability data in a tamper-evident store.
 """
 
+import contextlib
 import logging
 import os
 from datetime import UTC, datetime, timedelta
@@ -237,9 +238,7 @@ class AuditLogger:
         # Parse scalar floats
         for field in ("predicted_price", "confidence_score", "latency_ms"):
             if field in result:
-                try:
+                with contextlib.suppress(TypeError, ValueError):
                     result[field] = float(result[field])
-                except (TypeError, ValueError):
-                    pass
 
         return result

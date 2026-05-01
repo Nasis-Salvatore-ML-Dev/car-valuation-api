@@ -19,6 +19,7 @@ References:
     Yurdakul (2018) — Statistical Properties of PSI.
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -149,10 +150,8 @@ class DriftMonitor:
             for rec in recent_records:
                 val = rec.get("input_features", {}).get(feature)
                 if val is not None:
-                    try:
+                    with contextlib.suppress(TypeError, ValueError):
                         actual_values.append(float(val))
-                    except (TypeError, ValueError):
-                        pass
 
             if len(actual_values) < 10:
                 logger.warning("Feature %r: fewer than 10 actual values — skipping PSI.", feature)

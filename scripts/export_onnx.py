@@ -35,10 +35,7 @@ def export_to_onnx(model_path: str, output_path: str) -> None:
     logger.info("Loading pkl model from %s", model_path)
     package = joblib.load(model_path)
 
-    if isinstance(package, dict):
-        model = package["model"]
-    else:
-        model = package
+    model = package["model"] if isinstance(package, dict) else package
 
     n_features = model.n_features_in_
     logger.info("Model: %s | n_features=%d", type(model).__name__, n_features)

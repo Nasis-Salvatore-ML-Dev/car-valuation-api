@@ -1,6 +1,11 @@
 """Feature engineering. Extracted from Phase 1 app.py on Day 1."""
 
+import logging
+
+import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def build_feature_dataframe(payload, encoders, target_encodings) -> pd.DataFrame:
