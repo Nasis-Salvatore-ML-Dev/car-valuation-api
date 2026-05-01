@@ -112,7 +112,11 @@ def preprocess_inputbuild_feature_dataframe(payload, encoders, target_encodings)
                     df[col] = (
                         df[col]
                         .astype(str)
-                        .apply(lambda x, enc=encoder: enc.transform([x])[0] if x in enc.classes_ else -1)
+                        .apply(
+                            lambda x, enc=encoder: enc.transform([x])[0]
+                            if x in enc.classes_
+                            else -1
+                        )
                     )
                 except Exception as e:
                     logger.warning(f"Encoding error for column {col}: {e}")
