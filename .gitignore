@@ -6,7 +6,6 @@ models/*.pkl
 models/*.onnx
 
 # Data (generated, not committed)
-data/baselines/
 data/reports/
 data/training/
 data/validation/
