@@ -1,5 +1,7 @@
 FROM public.ecr.aws/lambda/python:3.11 AS builder
 
+RUN yum install -y gcc gcc-c++ && yum clean all
+
 RUN pip install --upgrade pip
 
 COPY requirements.txt .
