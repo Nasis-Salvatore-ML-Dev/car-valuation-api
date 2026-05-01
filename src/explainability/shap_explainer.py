@@ -63,7 +63,7 @@ class SHAPExplainer:
 
         # Pre-compute global importance over background
         logger.info("Computing global SHAP importance over background set.")
-        bg_shap = self._explainer.shap_values(background)
+        bg_shap = self._explainer.shap_values(background, check_additivity=False)
         mean_abs = np.abs(bg_shap).mean(axis=0)
 
         # Convert log-scale SHAP → EUR-scale (approximate: multiply by median price)
