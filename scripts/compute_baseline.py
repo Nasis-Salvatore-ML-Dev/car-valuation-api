@@ -107,7 +107,8 @@ def main() -> None:
 
     # Sample SHAP background dataset
     # Use model feature columns only (drop target)
-    feature_cols = [c for c in df.columns if c != "actual_price_log"]
+    feature_cols = df.select_dtypes(include='number').columns.tolist()
+    feature_cols = [c for c in feature_cols if c != "actual_price_log"]
     background = df[feature_cols].sample(n=min(N_SHAP_BACKGROUND, len(df)), random_state=42)
     bg_path = Path(SHAP_BACKGROUND_OUTPUT)
     bg_path.parent.mkdir(parents=True, exist_ok=True)
