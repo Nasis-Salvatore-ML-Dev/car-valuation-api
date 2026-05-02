@@ -38,7 +38,6 @@ from src.api.schemas import (
     PredictionRequest,
     PredictionResponse,
 )
-
 from src.monitoring.audit_logger import AuditLogger
 from src.monitoring.bias_tester import BiasTestSuite
 from src.monitoring.drift import DriftMonitor
@@ -63,7 +62,7 @@ logger = logging.getLogger(__name__)
 # Application state (loaded once per Lambda container lifetime)
 # ---------------------------------------------------------------------------
 _model_bundle: ModelBundle | None = None
-_shap_explainer: SHAPExplainer | None = None
+_shap_explainer: object | None = None
 _drift_monitor: DriftMonitor | None = None
 _audit_logger: AuditLogger | None = None
 _bias_suite: BiasTestSuite | None = None
