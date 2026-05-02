@@ -92,18 +92,8 @@ async def lifespan(app: FastAPI):
         logger.exception("Fatal: model loading failed.")
         raise
 
-    # SHAP: non-fatal — lazy import to isolate C-extension crashes
-    try:
-        from src.explainability.shap_explainer import SHAPExplainer
-
-        _shap_explainer = SHAPExplainer(_model_bundle)
-        logger.info("SHAP explainer initialised.")
-    except Exception:
-        _shap_explainer = None
-        logger.exception(
-            "SHAP explainer failed to initialise. "
-            "Predictions will be served without SHAP values."
-        )
+    _shap_explainer = None
+    logger.info("SHAP explainer skipped (Lambda runtime constraint).")
 
     try:
         _drift_monitor = DriftMonitor()
