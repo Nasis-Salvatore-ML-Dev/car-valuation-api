@@ -38,7 +38,7 @@ from src.api.schemas import (
     PredictionRequest,
     PredictionResponse,
 )
-from src.explainability.shap_explainer import SHAPExplainer
+
 from src.monitoring.audit_logger import AuditLogger
 from src.monitoring.bias_tester import BiasTestSuite
 from src.monitoring.drift import DriftMonitor
@@ -93,8 +93,10 @@ async def lifespan(app: FastAPI):
         logger.exception("Fatal: model loading failed.")
         raise
 
-    # SHAP: non-fatal — service degrades gracefully without it
+    # SHAP: non-fatal — lazy import to isolate C-extension crashes
     try:
+        from src.explainability.shap_explainer import SHAPExplainer
+
         _shap_explainer = SHAPExplainer(_model_bundle)
         logger.info("SHAP explainer initialised.")
     except Exception:
