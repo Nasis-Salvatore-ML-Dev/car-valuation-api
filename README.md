@@ -10,6 +10,10 @@ deployment, and a human override queue for low-confidence predictions.
 
 ## Live Endpoints
 
+**Base URL:** `https://4mhpswg272.execute-api.eu-central-1.amazonaws.com`
+
+> **Availability note:** Portfolio project on AWS free tier, live as of May 2026. If you are reading this significantly later, the endpoint may have been taken down to avoid post-free-tier costs. See [Local Development](#local-development) to run locally.
+
 | Endpoint          | Method | Description                                |
 | ----------------- | ------ | ------------------------------------------ |
 | `/health`         | GET    | Liveness check + model version             |
@@ -23,7 +27,7 @@ deployment, and a human override queue for low-confidence predictions.
 ### Example: predict a price
 
 ```bash
-curl -s -X POST https://<API_URL>/predict \
+curl -s -X POST https://4mhpswg272.execute-api.eu-central-1.amazonaws.com/predict \
   -H "Content-Type: application/json" \
   -d '{
     "model_key": "320d",
