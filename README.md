@@ -263,7 +263,7 @@ Any public redistribution of the Software, whether modified or unmodified, must 
 
 ### Example acknowledgment
 
-> "Based on original work by Salvo."
+> "Based on original work by Salvatore Nasisi."
 
 ---
 
